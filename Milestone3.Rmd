@@ -8,11 +8,48 @@ output: pdf_document
 ```{r}
 library(readr)
 library(sf)
+library("ggridges")
+library("dplyr")
+library("usdata")
+library("ggplot2")
+library("robservable")
+library("feasts")
+library("fpp2")
+library("tsibbledata")
+theme_set(theme_minimal())
 ```
 
-```{r}
+```{r Read in Data}
 transmission<-read_csv("transmission_new.csv")
-transmission
+vaccination<-read_csv("vaccination_new.csv")
+transmission<-transmission %>% 
+  rename(state=state_name,county=county_name,Date=date)
+vaccination<-vaccination %>% 
+  mutate(state=abbr2state(state))
+vac_and_trans<-transmission %>% 
+  full_join(vaccination) %>% 
+  drop_na()
+vac_and_trans #Put the datasets together
+```
+
+```{r Map}
+
+```
+
+```{r Metro vs Non-Metro}
+vac_and_trans %>% 
+  group_by(Date,state)
+
+duplicates(vac_and_trans)
+ggplot()+
+  geom_line(data=vac_and_trans %>% filter(metro=="Metro"),aes(Date,positive_pct,group=county),col="green")+
+  geom_line(data=vac_and_trans %>% filter(metro=="Non-metro"),aes(Date,positive_pct,group=county),col="blue")+
+  facet_wrap(~state)
+ggplot(vac_and_trans)+
+  geom_col(aes(Date,positive_pct,fill=metro),stat="identity",position = "dodge")+
+  ggtitle("Transmission Rate by Metro Status")+
+  theme(plot.title = element_text(color = "black"))
+
 ```
 
 
