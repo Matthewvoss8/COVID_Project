@@ -1,0 +1,193 @@
+---
+title: "milestone 2"
+author: "Huailin Tang"
+date: "3/10/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("dplyr")
+library("ggplot2")
+```
+
+# vaccine
+```{r}
+# data source: https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh
+vaccine <- read.csv("COVID-19_Vaccinations_in_the_United_States_County.csv")
+```
+
+```{r}
+head(vaccine)
+```
+
+```{r}
+vaccine$Date = as.Date(vaccine$Date, format = "%m/%d/%Y")
+vaccination_new <- vaccine %>% 
+  filter(Date >= "2022/03/01" & Date <= "2022/03/31") %>% #only use march data
+  filter(Recip_State %in% c("ND","SD","NE","KS","MO","IA","MN","WI","MI","IL","IN","OH")) %>% #filter Midwest
+  select(Date, Recip_County, Recip_State, Administered_Dose1_Pop_Pct, Series_Complete_Pop_Pct, Metro_status) %>% #filter key variable
+  rename(county = Recip_County, state = Recip_State, dose_1_pct = Administered_Dose1_Pop_Pct, fully_pct = Series_Complete_Pop_Pct, metro = Metro_status)
+```
+
+```{r}
+head(vaccination_new)
+```
+
+```{r}
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=Date, y=dose_1_pct)) 
+
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=Date, y=fully_pct)) 
+
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=state, y=dose_1_pct))
+
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=state, y=fully_pct))
+
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=county, y=dose_1_pct))
+
+vaccination_new %>% 
+  ggplot() +
+  geom_point(aes(x=county, y=fully_pct))
+```
+
+From the visualization below, we see there are zero dose 1 percentage and fully vaccination percentage. These zero might from the same place. 
+After we look at the data, we see there are many "Unknown County", we get rid of them. It is likely these "Unknown County" is caused by data collection errors. 
+There is also NA in the dataset, we replace the NA with the average of vaccination rate (dose 1 percentage or fully vaccination percentage) of counties in the same state, in the same date. 
+There are still some zero left in dose 1 percentage. More specifically, all dose 1 percentage in NE from 03/01 to 03/15 are 0. This might be caused by NE does not report dose 1 percentage to CDC at this time period. We will not include NE in the graph for dose 1 percentage.
+Some Michigan counties: Montcalm county from 03/02 to 03/15, Newayago county from 03/01 to 03/15, and Van Buren county from 03/05 to 03/15 all have 0 dose 1 percentage. We replace them with nearest non-zero first dose percentage.
+
+```{r}
+vaccination_new <- vaccination_new %>%
+  filter(county != "Unknown County")
+
+#replace NA in dose_1_pct with average
+for(i in 1:nrow(vaccination_new)){
+  if (is.na(vaccination_new[i,"dose_1_pct"]) == TRUE){
+    dose_1_mean = vaccination_new %>% 
+      filter(Date == vaccination_new[i, "Date"], 
+             state == vaccination_new[i, "state"]) %>% 
+      summarise(mean = mean(vaccination_new[,"dose_1_pct"], na.rm = TRUE)) %>% 
+      pull(unique(mean))
+    vaccination_new[i,"dose_1_pct"] = dose_1_mean
+  }
+}
+
+#replace NA in fully_pct with average
+for(i in 1:nrow(vaccination_new)){
+  if (is.na(vaccination_new[i,"fully_pct"]) == TRUE){
+    fully_mean = vaccination_new %>% 
+      filter(Date == vaccination_new[i, "Date"], 
+             state == vaccination_new[i, "state"]) %>% 
+      summarise(mean = mean(vaccination_new[,"fully_pct"], na.rm = TRUE)) %>% 
+      pull(unique(mean))
+    vaccination_new[i,"fully_pct"] = fully_mean
+  }
+}
+
+#replace zero value in three county
+for(i in 1:nrow(vaccination_new)){
+  if (vaccination_new[i, "county"] == "Van Buren County" & 
+      vaccination_new[i, "state"] == "MI" &
+      vaccination_new[i, "Date"] >= "2022-03-05" & 
+      vaccination_new[i, "Date"] <= "2022-03-15"){
+    vaccination_new[i, "dose_1_pct"] = 56.7 #replace with dose 1 percentage on 03/04
+  }
+  if (vaccination_new[i, "county"] == "Montcalm County" & 
+      vaccination_new[i, "state"] == "MI" &
+      vaccination_new[i, "Date"] >= "2022-03-02" & 
+      vaccination_new[i, "Date"] <= "2022-03-15"){
+    vaccination_new[i, "dose_1_pct"] = 42.1 #replace with dose 1 percentage on 03/01
+  }
+  if (vaccination_new[i, "county"] == "Newaygo County" & 
+      vaccination_new[i, "state"] == "MI" &
+      vaccination_new[i, "Date"] >= "2022-03-01" & 
+      vaccination_new[i, "Date"] <= "2022-03-15"){
+    vaccination_new[i, "dose_1_pct"] = 54.49181 #replace with dose 1 percentage on 03/16
+  }
+}
+```
+
+```{r}
+write.csv(vaccination_new,"vaccination_new.csv", row.names = FALSE)
+```
+
+# COVID-19 transmission
+```{r}
+# data source: https://data.cdc.gov/Public-Health-Surveillance/United-States-COVID-19-County-Level-of-Community-T/nra9-vzzn
+transmission <- read.csv("United_States_COVID-19_County_Level_of_Community_Transmission_Historical_Changes.csv")
+```
+
+```{r}
+head(transmission)
+```
+
+```{r}
+transmission$date = as.Date(transmission$date, format = "%m/%d/%Y")
+transmission_new <- transmission %>% 
+  filter(date >= "2022/03/01" & date <= "2022/03/31") %>% 
+  filter(state_name %in% c("Illinois", "Indiana", "Iowa", "Kansas", "Michigan", "Minnesota", "Missouri", "Nebraska", "North Dakota", "Ohio", "South Dakota", "Wisconsin")) %>% 
+  select(state_name, county_name, date, percent_test_results_reported_positive_last_7_days, community_transmission_level) %>% 
+  rename(positive_pct = percent_test_results_reported_positive_last_7_days, transmission_level = community_transmission_level)
+```
+
+```{r}
+transmission_new %>% 
+  ggplot() +
+  geom_point(aes(x=state_name, y=positive_pct))
+
+transmission_new %>% 
+  filter(state_name == "Iowa") #NA for all positive_pct
+
+transmission_new %>% 
+  ggplot() +
+  geom_point(aes(x=county_name, y=positive_pct))
+
+transmission_new %>% 
+  ggplot() +
+  geom_point(aes(x=date, y=positive_pct))
+```
+
+I examine the each variable in the reorganized dataset. 
+First problem: Iowa don't have Covid-19 test results. We exclude Iowa in the plot.
+Second problem: some rows have 0 in positive_pct. This might be caused by low testing number in the county. 
+Third problem: some rows have NA. A possible solution is replacing the NA with the average of positive_pct of counties with same transmission level, in the same state and in the same date.
+
+Fix the dataset based on the problems and solutions above.
+
+```{r}
+transmission$date = as.Date(transmission$date, format = "%m/%d/%Y")
+transmission_new <- transmission %>% 
+  filter(date >= "2022-03-01" & date <="2022-03-31") %>% # change the date
+  filter(state_name %in% c("Illinois", "Indiana", "Kansas", "Michigan", "Minnesota", "Missouri", "Nebraska", "North Dakota", "Ohio", "South Dakota", "Wisconsin")) %>% 
+  select(state_name, county_name, date, percent_test_results_reported_positive_last_7_days, community_transmission_level) %>% 
+  rename(positive_pct = percent_test_results_reported_positive_last_7_days, transmission_level = community_transmission_level)
+
+# replace NA with mean
+for(i in 1:nrow(transmission_new)){
+  if (is.na(transmission_new[i,"positive_pct"]) == TRUE){
+    transmission_mean = transmission_new %>% 
+      filter(date == transmission_new[i, "date"], 
+             state_name == transmission_new[i, "state_name"],
+             transmission_level == transmission_new[i, "transmission_level"]) %>% 
+      summarise(mean = mean(transmission_new[,"positive_pct"], na.rm = TRUE)) %>% 
+      pull(unique(mean))
+    transmission_new[i,"positive_pct"] = transmission_mean
+  }
+}
+```
+
+```{r}
+write.csv(transmission_new,"transmission_new.csv", row.names = FALSE)
+```
+
+
