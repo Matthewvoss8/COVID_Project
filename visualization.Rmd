@@ -1,0 +1,72 @@
+---
+title: "visualization"
+author: "Huailin Tang"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("dplyr")
+library("ggplot2")
+library("sf")
+library("maps")
+library("tools")
+library("rnaturalearth")
+library("rnaturalearthdata")
+theme_set(theme_bw())
+sf_use_s2(FALSE) 
+world <- ne_countries(scale = "medium", returnclass = "sf")
+class(world)
+```
+
+```{r}
+transmission = read.csv("transmission_new.csv")
+vaccination = read.csv("vaccination_new.csv")
+Midwest = c("Kansas","Illinois", "Indiana", "Michigan", "Minnesota", "Missouri", "Nebraska", "North Dakota", "Ohio", "South Dakota", "Wisconsin", "Iowa")
+```
+
+# Midwest states map
+```{r}
+states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+head(states)
+states <- cbind(states, st_coordinates(st_centroid(states)))
+states$ID <- toTitleCase(states$ID)
+head(states)
+```
+
+```{r}
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, fill = NA) + 
+  geom_label(data = states, 
+             aes(X, Y, 
+                 label = ifelse(ID %in% Midwest, paste0(ID), "")), 
+             size = 4, fontface = "bold", 
+             fill = alpha(c("gray"),0.1), label.size = 0, nudge_x = 0.1) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest states map") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Midwest counties map
+```{r}
+counties <- st_as_sf(map("county", plot = FALSE, fill = TRUE))
+counties <- subset(counties,
+                   grepl(c("kansas|illinois|indiana|michigan|minnesota|missouri|nebraska|north dakota|ohio|south dakota|wisconsin|iowa"), counties$ID))
+#remove Arkansas, Colorado, Kentucky, Pennsylvania from the map
+counties <- subset(counties, !grepl(c("arkansas|colorado|kentucky|pennsylvania"), counties$ID)) 
+counties$area <- as.numeric(st_area(counties))
+head(counties)
+```
+
+```{r}
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, lwd = 1)+
+  geom_sf(data = counties, fill = NA, color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
