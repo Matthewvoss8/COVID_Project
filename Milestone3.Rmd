@@ -49,7 +49,8 @@ ggplot(vac_and_trans)+
   geom_col(aes(Date,positive_pct,fill=metro),stat="identity",position = "dodge")+
   ggtitle("Transmission Rate by Metro Status")+
   theme(plot.title = element_text(color = "black"))
-
 ```
+
+
 
 

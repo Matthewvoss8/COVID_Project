@@ -70,3 +70,50 @@ ggplot(data = world) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
+```{r}
+library("usdata")
+library("lubridate")
+library("tidyr")
+transmssion<-readr::read_csv("transmission_new.csv")
+vaccination<-readr::read_csv("vaccination_new.csv")
+vac<-vaccination %>% 
+  mutate(state = abbr2state(state)) %>% 
+  rename(date=Date)
+trans<-transmission %>% 
+  rename(state=state_name, county=county_name) %>% 
+  mutate(date = date(date))
+vac_trans<-vac %>% 
+  left_join(trans)
+
+fill_data<-vac_trans %>% 
+  group_by(county,state) %>% 
+  summarise(percentPositive = mean(positive_pct)) %>% 
+  mutate(ID = paste0(tolower(state),",",tolower(county))) %>% 
+  ungroup() %>% 
+  separate(ID, c("ID","county"), sep = " ") %>% 
+  transmute(percentPositive,ID)
+fill_<-counties %>% 
+  left_join(fill_data)
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, lwd = 1)+
+  scale_fill_viridis_c()+
+  geom_sf(data = fill_, aes(fill = percentPositive), color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme_void()
+```
+
+```{r}
+
+ui<-fluidRow(
+  
+)
+server<-function(input,output){
+  
+}
+runApp(ui,server)
+```
+
+
