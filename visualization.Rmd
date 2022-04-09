@@ -106,12 +106,43 @@ ggplot(data = world) +
 ```
 
 ```{r}
-
-ui<-fluidRow(
+library("shiny")
+wrangler<-function(df, statein){
+  if(statein!="Whole"){
+  df %>% 
+    filter(state%in%statein)
+  }
+  else{
+    df
+  }
+}
+plot<-function(df){
+  df %>% 
+  group_by(county,state) %>% 
+  summarise(percentPositive = mean(positive_pct)) %>% 
+  mutate(ID = paste0(tolower(state),",",tolower(county))) %>% 
+  ungroup() %>% 
+  separate(ID, c("ID","county"), sep = " ") %>% 
+  transmute(percentPositive,ID) %>% 
+  right_join(counties) %>% 
+  ggplot(data = world) +
+  geom_sf() +
+  geom_sf(lwd = 1)+
+  scale_fill_viridis_c()+
+  geom_sf(data = fill_, aes(fill = percentPositive), color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme_void()
   
+}
+ui<-fluidPage(
+  radioButtons("state","Choose which State to observe",choices = c("Whole",unique(vac_trans$state))),
+  textOutput("text")
 )
 server<-function(input,output){
-  
+  covid_subset<-reactive({wrangler(vac_trans,input$state)})
+  output$text<-renderText(paste("This is the radio button,", input$state))
 }
 runApp(ui,server)
 ```
