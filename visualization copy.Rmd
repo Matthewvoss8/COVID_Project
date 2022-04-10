@@ -1,0 +1,168 @@
+---
+title: "visualization"
+author: "Huailin Tang"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("dplyr")
+library("ggplot2")
+library("sf")
+library("maps")
+library("tools")
+library("rnaturalearth")
+library("rnaturalearthdata")
+library("tidyverse")
+ library("patchwork")
+theme_set(theme_bw())
+sf_use_s2(FALSE) 
+world <- ne_countries(scale = "medium", returnclass = "sf")
+class(world)
+```
+
+```{r}
+county_transmission = read.csv("transmission_new.csv")
+county_vaccination = read.csv("vaccination_new.csv")
+state_vaccination = read.csv("state_vaccination_new.csv")
+state_transmission = read.csv("state_transmission_new.csv")
+Midwest = c("Kansas","Illinois", "Indiana", "Michigan", "Minnesota", "Missouri", "Nebraska", "North Dakota", "Ohio", "South Dakota", "Wisconsin", "Iowa")
+```
+
+# Midwest states map
+```{r}
+states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+head(states)
+states <- cbind(states, st_coordinates(st_centroid(states)))
+states$ID <- toTitleCase(states$ID)
+head(states)
+```
+
+```{r}
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, fill = NA) + 
+  geom_label(data = states, 
+             aes(X, Y, 
+                 label = ifelse(ID %in% Midwest, paste0(ID), "")), 
+             size = 4, fontface = "bold", 
+             fill = alpha(c("gray"),0.1), label.size = 0, nudge_x = 0.1) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest states map") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Midwest counties map
+```{r}
+counties <- st_as_sf(map("county", plot = FALSE, fill = TRUE))
+counties <- subset(counties,
+                   grepl(c("kansas|illinois|indiana|michigan|minnesota|missouri|nebraska|north dakota|ohio|south dakota|wisconsin|iowa"), counties$ID))
+#remove Arkansas, Colorado, Kentucky, Pennsylvania from the map
+counties <- subset(counties, !grepl(c("arkansas|colorado|kentucky|pennsylvania"), counties$ID)) 
+counties$area <- as.numeric(st_area(counties))
+head(counties)
+```
+
+```{r}
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, lwd = 1) +
+  geom_sf(data = counties, fill = NA, color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# state
+```{r}
+state <- state_transmission %>% 
+  merge(state_vaccination)
+```
+
+```{r}
+state %>% 
+  drop_na() %>% 
+  ggplot(aes(x = reorder(State, Positive_pct))) +
+  geom_line(aes(y = dose_1_pct, group = 1)) +
+  geom_line(aes(y = complete_pct, group = 1)) +
+  geom_bar(aes(y = Positive_pct * 20, alpha = 0.1, fill = Positive_pct), 
+           stat = "identity") + 
+  scale_y_continuous(sec.axis = sec_axis(~. *0.05, 
+                                         name = "Covid-19 positive percentage (bar)")) +
+  labs(x="State", y = "Vaccine percentage (line)")
+```
+
+The top line is fully vaccination percentage. The bottom line is first-dose vaccination percentage. The bar is Covid-19 testing positive percentage. Given data in CDC only provides several level (0-3%, 3-4.9%, 5-7.9%, 7.9-10%, 10-14.9 and so on), I could only plot the level of the percentage instead of the precise percentage. In the plot, there are 10 states (Iowa and Indiana are NA), there are 4 states in 3% level and 6 states in 4.9% level. There seems no strong relationship between vaccination rate (first_dose or fully vaccination) and Covid-19 testing positive percentage.
+
+```{r}
+library("usdata")
+county <- county_transmission %>% 
+  rename(state=state_name,county=county_name,Date=date)
+vac<- county_vaccination %>% 
+  mutate(state=abbr2state(state))
+county<-county %>% 
+  full_join(vac)
+```
+
+```{r}
+county_noblank <- county[county$transmission_level!="", ]
+state_order <- factor(county_noblank$state, levels = c("Illinois", "Kansas", "North Dakota", "Ohio", "Michigan", "Minnesota", "Missouri", "Nebraska", "South Dakota", "Wisconsin", "Indiana"))
+transmission_order <- factor(county_noblank$transmission_level, levels = c("low", "moderate", "high", "substantial"))
+
+ggplot(county_noblank) +
+  geom_bar(aes(x = state_order, fill = transmission_order), position = "fill") +
+  labs(x="State", y = "Percentage")
+```
+
+This is the distribution of the counties of different transmission levels in every state. It seems states with low test percentage generally have less percentage counties in substantial and high transmission (except Illinois). Minnesota has the highest percentage of counties in substantial and high transmission level; Missouri, Michigan, and Illinois come next. Therefore we suggests Minnesota, Missouri, Michigan, and Illinois governments should be alert and take approaches to reduce number of counties in substantial and high transmission level.
+
+```{r}
+state_order = factor(county$state, levels = c("Illinois", "Kansas", "North Dakota", "Ohio", "Michigan", "Minnesota", "Missouri", "Nebraska", "South Dakota", "Wisconsin", "Indiana"))
+
+county %>% 
+  ggplot() +
+  geom_bar(aes(x = state_order, fill = metro), position="fill") +
+  labs(x = "State", y = "Percentage")
+```
+
+This is the map of metro and non-metro percentage in states. 
+
+# county
+```{r message=FALSE, warning=FALSE}
+p <- list()
+p[["dose_1"]] <- county %>% 
+  ggplot() +
+  geom_point(aes(x = dose_1_pct, y = positive_pct)) +
+  scale_x_continuous(limits = c(10, 100)) +
+  labs(x = "Dose 1 percentage", y = "Positive percentage")
+
+p[["fully"]] <- county %>% 
+  ggplot() +
+  geom_point(aes(x = fully_pct, y = positive_pct)) +
+  scale_x_continuous(limits = c(10, 100)) +
+  labs(x = "Fully vaccinated percentage", y = "Positive percentage")
+
+p[["dose_1"]] + p[["fully"]]
+```
+
+The graph shows the relationship between 1st dose vaccination/fully vaccination and positive percentage in county level. In both graphs, 55 percent vaccination percentage seems like a turning point. Above 55 percent, high vaccination percentage leads to lower Covid-19 positive percentage; Blow 55 percent, higher vaccination percentage leads to Covid-19 higher positive percentage. One possible explanation is that (please help me fill it, or I will do it on Sunday.).
+
+
+```{r}
+p <- list()
+p[["dose_1"]] <- county %>% 
+  ggplot() +
+  geom_point(aes(x = dose_1_pct, y = positive_pct, col = metro)) +
+  scale_x_continuous(limits = c(10, 100)) + theme(legend.position = "bottom")
+
+p[["fully"]] <- county %>% 
+  ggplot() +
+  geom_point(aes(x = fully_pct, y = positive_pct, col = metro)) +
+  scale_x_continuous(limits = c(10, 100)) + theme(legend.position = "bottom")
+
+p[["dose_1"]] + p[["fully"]] + plot_layout(guides = "collect") + 
+  plot_annotation(theme = theme(legend.position = "bottom"))
+```
+
+The graphs show the metro in counties level. In both graph, metro area general have higher vaccination rate and most of their Covid-19 positive percentage is in relative low levels.  Therefore, government should put more focus on non-metro counties and metro counties with high Covid-19 positive percentage.
