@@ -166,3 +166,125 @@ p[["dose_1"]] + p[["fully"]] + plot_layout(guides = "collect") +
 ```
 
 The graphs show the metro in counties level. In both graph, metro area general have higher vaccination rate and most of their Covid-19 positive percentage is in relative low levels.  Therefore, government should put more focus on non-metro counties and metro counties with high Covid-19 positive percentage.
+
+
+```{r}
+ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, lwd = 1)+
+  geom_sf(data = counties, fill = NA, color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+library("usdata")
+library("lubridate")
+library("tidyr")
+library("sf")
+transmssion<-readr::read_csv("transmission_new.csv")
+vaccination<-readr::read_csv("vaccination_new.csv")
+vac<-vaccination %>% 
+  mutate(state = abbr2state(state)) %>% 
+  rename(date=Date)
+trans<-transmission %>% 
+  rename(state=state_name, county=county_name) %>% 
+  mutate(date = date(date))
+vac_trans<-vac %>% 
+  left_join(trans)
+
+fill_data<-vac_trans %>% 
+  group_by(county,state) %>% 
+  summarise(percentPositive = mean(positive_pct)) %>% 
+  mutate(ID = paste0(tolower(state),",",tolower(county))) %>% 
+  ungroup() %>% 
+  separate(ID, c("ID","county"), sep = " ") %>% 
+  transmute(percentPositive,ID)
+fill_<-counties %>% 
+  left_join(fill_data)
+whole_map<-ggplot(data = world) +
+  geom_sf() +
+  geom_sf(data = states, lwd = 1)+
+  scale_fill_viridis_c()+
+  geom_sf(data = fill_, aes(fill = percentPositive), color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme_void()
+library("plotly")
+ggplotly(whole_map)
+```
+I tried to setup the transmission rate and be able to zoom in by radio button, but my computer was giving me this error of server must be a function. 
+```{r}
+#please disregard this chunk for now
+library("shiny")
+wrangler<-function(df, statein){
+  if(statein!="Whole"){
+  df %>% 
+    filter(state%in%statein)
+  }
+  else{
+    df
+  }
+}
+plot<-function(df){
+  df %>% 
+  group_by(county,state) %>% 
+  summarise(percentPositive = mean(positive_pct)) %>% 
+  mutate(ID = paste0(tolower(state),",",tolower(county))) %>% 
+  ungroup() %>% 
+  separate(ID, c("ID","county"), sep = " ") %>% 
+  transmute(percentPositive,ID) %>% 
+  right_join(counties) %>% 
+  ggplot(data = world) +
+  geom_sf() +
+  geom_sf(lwd = 1)+
+  scale_fill_viridis_c()+
+  geom_sf(data = fill_, aes(fill = percentPositive), color = gray(.5)) +
+  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
+  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme_void()
+  
+}
+ui<-fluidPage(
+  radioButtons("state","Choose which State to observe",choices = c("Whole",unique(vac_trans$state))),
+  textOutput("text")
+)
+server<-function(input,output){
+  covid_subset<-reactive({wrangler(vac_trans,input$state)})
+  output$text<-renderText(paste("This is the radio button,", input$state))
+}
+runApp(ui,server)
+```
+
+```{r}
+#I'd like to remove the annoying column labels on the bottom since it's kindof an eye sore.
+library(superheat)
+vac_trans %>% 
+  group_by(state,date) %>% 
+  summarise(trans_by_state=mean(positive_pct)) %>% 
+  filter(!state%in%c("Iowa","Missouri")) %>% 
+  pivot_wider(names_from = date, values_from = trans_by_state,values_fill=0) %>% 
+  column_to_rownames(var = "state") %>% 
+  superheat(title = "Positvie Rates of COVID-19 by State")
+```
+```{r}
+#Kindof lame, but it helps to build an intuition of the dataset.
+vac_trans$dose_1_pct[is.na(vac_trans$dose_1_pct)]=0
+vac_trans %>% 
+  group_by(date,state) %>% 
+  summarise(first=mean(dose_1_pct), full = mean(fully_pct)) %>% 
+  ggplot()+
+  geom_line(aes(date,first,col=state,group=state))+
+  geom_line(aes(date,full,col=state,group=state),linetype="dashed")+
+  facet_wrap(~state)
+#I think this graph could be helpful, but conversely it says that getting just one dose has a stronger negative linear correlation with being positive than two doses.
+library("GGally")
+vac_trans %>% 
+  group_by(date,state) %>% 
+  summarise(positve=mean(positive_pct), one=mean(dose_1_pct),full = mean(fully_pct)) %>% 
+  ggpairs(columns = 3:5,method = c("everything","pearson"),aes(label=state)) 
+```
+
