@@ -1,4 +1,4 @@
-"state_name","county_name","date","positive_pct","transmission_level"
+"state","county","Date","positive_pct","transmission_level"
 "South Dakota","Hand County",2022-03-09,0,"low"
 "Nebraska","Deuel County",2022-03-09,3.6294571536429,""
 "Minnesota","Red Lake County",2022-03-09,0,"low"

@@ -96,13 +96,8 @@ state %>%
 The top line is fully vaccination percentage. The bottom line is first-dose vaccination percentage. The bar is Covid-19 testing positive percentage. Given data in CDC only provides several level (0-3%, 3-4.9%, 5-7.9%, 7.9-10%, 10-14.9 and so on), I could only plot the level of the percentage instead of the precise percentage. In the plot, there are 10 states (Iowa and Indiana are NA), there are 4 states in 3% level and 6 states in 4.9% level. There seems no strong relationship between vaccination rate (first_dose or fully vaccination) and Covid-19 testing positive percentage.
 
 ```{r}
-library("usdata")
-county <- county_transmission %>% 
-  rename(state=state_name,county=county_name,Date=date)
-vac<- county_vaccination %>% 
-  mutate(state=abbr2state(state))
-county<-county %>% 
-  full_join(vac)
+county <- county_vaccination %>% 
+  merge(county_transmission, by = c("Date", "county", "state"))
 ```
 
 ```{r}
@@ -212,52 +207,11 @@ whole_map<-ggplot(data = world) +
   labs(x="Latitude", y="Longitude", title="Midwest counties map") +
   theme(plot.title = element_text(hjust = 0.5))+
   theme_void()
+ggsave("map.png")
 library("plotly")
 ggplotly(whole_map)
 ```
 I tried to setup the transmission rate and be able to zoom in by radio button, but my computer was giving me this error of server must be a function. 
-```{r}
-#please disregard this chunk for now
-library("shiny")
-wrangler<-function(df, statein){
-  if(statein!="Whole"){
-  df %>% 
-    filter(state%in%statein)
-  }
-  else{
-    df
-  }
-}
-plot<-function(df){
-  df %>% 
-  group_by(county,state) %>% 
-  summarise(percentPositive = mean(positive_pct)) %>% 
-  mutate(ID = paste0(tolower(state),",",tolower(county))) %>% 
-  ungroup() %>% 
-  separate(ID, c("ID","county"), sep = " ") %>% 
-  transmute(percentPositive,ID) %>% 
-  right_join(counties) %>% 
-  ggplot(data = world) +
-  geom_sf() +
-  geom_sf(lwd = 1)+
-  scale_fill_viridis_c()+
-  geom_sf(data = fill_, aes(fill = percentPositive), color = gray(.5)) +
-  coord_sf(xlim = c(-105.5, -79), ylim = c(36.15, 49.5), expand = FALSE) +
-  labs(x="Latitude", y="Longitude", title="Midwest counties map") +
-  theme(plot.title = element_text(hjust = 0.5))+
-  theme_void()
-  
-}
-ui<-fluidPage(
-  radioButtons("state","Choose which State to observe",choices = c("Whole",unique(vac_trans$state))),
-  textOutput("text")
-)
-server<-function(input,output){
-  covid_subset<-reactive({wrangler(vac_trans,input$state)})
-  output$text<-renderText(paste("This is the radio button,", input$state))
-}
-runApp(ui,server)
-```
 
 ```{r}
 #I'd like to remove the annoying column labels on the bottom since it's kindof an eye sore.
