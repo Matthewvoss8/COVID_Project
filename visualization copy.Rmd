@@ -242,3 +242,42 @@ vac_trans %>%
   ggpairs(columns = 3:5,method = c("everything","pearson"),aes(label=state)) 
 ```
 
+
+
+
+```{r}
+scaled_state<-state %>% 
+  drop_na() %>%
+  select(-State) %>% 
+  scale()
+
+state %>%
+  filter(!is.na(Positive_pct)) %>% 
+  select(State) %>% 
+  cbind(scaled_state) %>% 
+  ggplot(aes(x = reorder(State, Positive_pct))) +
+  geom_line(aes(y = dose_1_pct, group = 1)) +
+  geom_line(aes(y = complete_pct, group = 1)) +
+  geom_bar(aes(y = Positive_pct, alpha = 0.1, fill = Positive_pct), 
+           stat = "identity") + 
+  scale_y_continuous(sec.axis = sec_axis(~. *0.05, 
+                                         name = "Covid-19 positive percentage (bar)")) +
+  labs(x="State", y = "Vaccine percentage (line)")+
+  theme(axis.text.x = element_text(angle=90))
+```
+-Matt: After scaling the data it appears that the vaccination rate has an inverse linear relationship with number of cases for some. So you would expect the line to be 
+
+```{r}
+temp<-vac_and_trans %>% 
+  mutate(metro=ifelse(metro=="Non-metro",0,1)) %>% 
+  select(-c(state,county,Date,transmission_level)) 
+library(generics)
+library(cluster)
+silhouette<-kmeans(temp,centers=7) %>% 
+  augment(vac_and_trans) %>% 
+  mutate(silhouette = silhouette(as.integer(.cluster), dist(temp))[, "sil_width"])
+silhouette %>% 
+  filter(state=="Wisconsin") %>% 
+  ggplot()+
+  geom_point(aes(fully_pct,positive_pct,size=silhouette,col=.cluster))
+```
